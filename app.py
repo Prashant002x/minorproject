@@ -2,6 +2,7 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 import tensorflow as tf
+
 # Inject CSS to hide the GitHub "Fork" button
 hide_fork_button = """
 <style>
@@ -33,8 +34,13 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Load the pre-trained model
-model = tf.keras.models.load_model('best_model.h5')
+# Load pre-trained models
+model_1 = tf.keras.models.load_model('model_DenseNet121.h5')
+model_2 = tf.keras.models.load_model('model_InceptionV3.h5')
+model_3 = tf.keras.models.load_model('model_MobileNet.h5')
+
+# Load optimal ensemble weights from a .npy file
+weights = np.load('ensemble_weights.npy')  # This file contains weights for the ensemble
 
 # Define labels for categories
 labels = {
@@ -49,16 +55,25 @@ labels = {
 # Function to preprocess the image
 def preprocess_image(image):
     image = image.resize((224, 224))  # Resize to 224x224
-    image_array = np.expand_dims(np.array(image), axis=0)  # Convert and expand dimensions
+    image_array = np.array(image) / 255.0  # Normalize the image
+    image_array = np.expand_dims(image_array, axis=0)  # Expand dimensions for model input
     return image_array
 
-# Function to make predictions
+# Function to make predictions using weighted ensemble
 def predict(image):
     processed_image = preprocess_image(image)
-    prediction = model.predict(processed_image)
-    label_index = np.argmax(prediction)
+    # Get predictions from all models
+    pred_1 = model_1.predict(processed_image)
+    pred_2 = model_2.predict(processed_image)
+    pred_3 = model_3.predict(processed_image)
+    
+    # Weighted ensemble using weights loaded from the .npy file
+    ensemble_prediction = (weights[0] * pred_1 + weights[1] * pred_2 + weights[2] * pred_3)
+    
+    # Final prediction
+    label_index = np.argmax(ensemble_prediction)
     predicted_label = labels[label_index]
-    confidence = prediction[0][label_index] * 100
+    confidence = ensemble_prediction[0][label_index] * 100
     return predicted_label, confidence
 
 # Streamlit app
@@ -80,17 +95,6 @@ def main():
         st.markdown(f"<h3 class='center'>This might be:</h3>", unsafe_allow_html=True)
         st.markdown(f"<h1 class='center'>{predicted_label}</h1>", unsafe_allow_html=True)
         st.markdown(f"<p class='center'>Confidence: {confidence:.2f}%</p>", unsafe_allow_html=True)
-st.markdown(
-    """
-    <style>
-    .css-1jc7ptx, .e1ewe7hr3, .viewerBadge_container__1QSob,
-    .styles_viewerBadge__1yB5_, .viewerBadge_link__1S137,
-    .viewerBadge_text__1JaDK {
-        display: none;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+
 if __name__ == '__main__':
     main()
